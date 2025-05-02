@@ -35,23 +35,9 @@
 #include <moveit_msgs/msg/collision_object.hpp>
 
 // MoveIt
-#if __has_include(<moveit/robot_state/conversions.hpp>)
-#include <moveit/robot_state/conversions.hpp>
-#else
 #include <moveit/robot_state/conversions.h>
-#endif
-
-#if __has_include(<moveit/collision_detection/collision_tools.hpp>)
-#include <moveit/collision_detection/collision_tools.hpp>
-#else
 #include <moveit/collision_detection/collision_tools.h>
-#endif
-
-#if __has_include(<moveit/macros/console_colors.hpp>)
-#include <moveit/macros/console_colors.hpp>
-#else
 #include <moveit/macros/console_colors.h>
-#endif
 
 // Conversions
 #if __has_include(<tf2_eigen/tf2_eigen.hpp>)
@@ -75,17 +61,20 @@
 #include <set>
 #include <limits>
 #include <iomanip>
+#include <filesystem>
 
 using namespace std::literals::chrono_literals;
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_visual_tools");
 namespace moveit_visual_tools
 {
-MoveItVisualTools::MoveItVisualTools(const rclcpp::Node::SharedPtr& node)
+MoveItVisualTools::MoveItVisualTools(const rclcpp::Node::SharedPtr& node,
+                                     bool save_cartesian_path)
   : RvizVisualTools("", rviz_visual_tools::RVIZ_MARKER_TOPIC, node)
   , robot_state_topic_(DISPLAY_ROBOT_STATE_TOPIC)
   , planning_scene_topic_(PLANNING_SCENE_TOPIC)
   , node_(node)
+  , save_cartesian_path_(save_cartesian_path)
 {
   loadSharedRobotState();
   setBaseFrame(robot_model_->getModelFrame());
@@ -93,21 +82,25 @@ MoveItVisualTools::MoveItVisualTools(const rclcpp::Node::SharedPtr& node)
 
 MoveItVisualTools::MoveItVisualTools(const rclcpp::Node::SharedPtr& node, const std::string& base_frame,
                                      const std::string& marker_topic,
-                                     planning_scene_monitor::PlanningSceneMonitorPtr psm)
+                                     planning_scene_monitor::PlanningSceneMonitorPtr psm,
+                                     bool save_cartesian_path)
   : RvizVisualTools::RvizVisualTools(base_frame, marker_topic, node)
   , psm_(std::move(psm))
   , robot_state_topic_(DISPLAY_ROBOT_STATE_TOPIC)
   , planning_scene_topic_(PLANNING_SCENE_TOPIC)
   , node_(node)
+  , save_cartesian_path_(save_cartesian_path)
 {
 }
 
 MoveItVisualTools::MoveItVisualTools(const rclcpp::Node::SharedPtr& node, const std::string& base_frame,
-                                     const std::string& marker_topic, moveit::core::RobotModelConstPtr robot_model)
+                                     const std::string& marker_topic, moveit::core::RobotModelConstPtr robot_model,
+                                     bool save_cartesian_path)
   : RvizVisualTools::RvizVisualTools(base_frame, marker_topic, node)
   , robot_model_(std::move(robot_model))
   , planning_scene_topic_(PLANNING_SCENE_TOPIC)
   , node_(node)
+  , save_cartesian_path_(save_cartesian_path)
 {
 }
 
@@ -1330,6 +1323,10 @@ void MoveItVisualTools::publishTrajectoryPath(const moveit_msgs::msg::DisplayTra
 bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                                               const moveit::core::LinkModel* ee_parent_link,
                                               const moveit::core::JointModelGroup* arm_jmg,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
   // Error check
@@ -1347,18 +1344,40 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
       new robot_trajectory::RobotTrajectory(robot_model_, arm_jmg->getName()));
   robot_trajectory->setRobotTrajectoryMsg(*shared_robot_state_, trajectory_msg);
 
-  return publishTrajectoryLine(robot_trajectory, ee_parent_link, color);
+  return publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                                               const moveit::core::LinkModel* ee_parent_link,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
-  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, color);
+  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color);
+}
+
+std::string MoveItVisualTools::getUniqueFileName(const std::string& base_name, const std::string& extension) {
+  std::string file_name = base_name + extension;
+  int index = 0;
+
+  // Check if the file already exists
+  while (std::filesystem::exists(file_name)) {
+      // Append an index to the base name
+      file_name = base_name + "_" + std::to_string(index) + extension;
+      ++index;
+  }
+
+  return file_name;
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                                               const moveit::core::LinkModel* ee_parent_link,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
   // Error check
@@ -1370,31 +1389,105 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
 
   // Point location datastructure
   EigenSTL::vector_Vector3d path;
+  EigenSTL::vector_Vector7d path_tcp;
+  EigenSTL::vector_Vector7d path_ee;
+  std::vector<Eigen::Isometry3d> path_tcp_matrix;
+  std::vector<double> path_time_from_start;
+
+  RCLCPP_INFO_STREAM(LOGGER, "Publishing path with color: " << color);
 
   // Visualize end effector position of cartesian path
   for (std::size_t i = 0; i < robot_trajectory.getWayPointCount(); ++i)
   {
-    const Eigen::Isometry3d& tip_pose = robot_trajectory.getWayPoint(i).getGlobalLinkTransform(ee_parent_link);
+    double time_from_start = robot_trajectory.getWayPointDurationFromStart(i);
+    path_time_from_start.push_back(time_from_start);
+
+    Eigen::Isometry3d ee_pose = robot_trajectory.getWayPoint(i).getGlobalLinkTransform(ee_parent_link);
+
+    // Apply the translation in the z-axis
+    Eigen::Isometry3d tcp_pose = ee_pose * offset;
+    path_tcp_matrix.push_back(tcp_pose);
 
     // Error Check
-    if (tip_pose.translation().x() != tip_pose.translation().x())
+    if (ee_pose.translation().x() != ee_pose.translation().x())
     {
       RCLCPP_ERROR_STREAM(LOGGER, "NAN DETECTED AT TRAJECTORY POINT i=" << i);
       return false;
     }
 
-    path.push_back(tip_pose.translation());
-    publishSphere(tip_pose, color, rviz_visual_tools::MEDIUM);
+    path.push_back(tcp_pose.translation());
+
+    Eigen::Quaterniond ee_rotation(ee_pose.rotation());
+    // Concatenate translation and rotation into a single vector
+    Eigen::Matrix<double, 7, 1> ee_pose_vector;
+    ee_pose_vector << ee_pose.translation(), ee_rotation.coeffs();
+    path_ee.push_back(ee_pose_vector);
+
+
+    Eigen::Quaterniond tcp_rotation(tcp_pose.rotation());
+    // Concatenate translation and rotation into a single vector
+    Eigen::Matrix<double, 7, 1> tcp_pose_vector;
+    tcp_pose_vector << tcp_pose.translation(), tcp_rotation.coeffs();
+    path_tcp.push_back(tcp_pose_vector);
+
+    publishSphere(tcp_pose, color, rviz_visual_tools::MEDIUM);
   }
 
   const double radius = 0.005;
   publishPath(path, color, radius);
+
+  if (save_cartesian_path_){
+    std::string tcp_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_tcp_trajectory_" + std::to_string(subtraj_index) + ".txt";
+    // std::string tcp_file_name = getUniqueFileName(store_path + "/stage_" + std::to_string(stage_id) + "_tcp_trajectory", ".txt");
+    std::ofstream out_tcp_file(tcp_file_name);
+    // Save the Cartesian position of each position in path into file
+    // for (const Eigen::Matrix<double, 7, 1>& fingertip_pose : path_tcp){
+    //   out_tcp_file << fingertip_pose(0) << " "
+    //                << fingertip_pose(1) << " "
+    //                << fingertip_pose(2) << " "
+    //                << fingertip_pose(3) << " "
+    //                << fingertip_pose(4) << " "
+    //                << fingertip_pose(5) << " "
+    //                << fingertip_pose(6) << "\n";
+    // }
+    // Save the Cartesian Matrix of each pose in path into file
+    for (std::size_t i = 0; i < robot_trajectory.getWayPointCount(); ++i) {
+      double time_stamp = path_time_from_start[i];
+      out_tcp_file << time_stamp << " ";
+      
+      // Flatten the matrix into a row (3x4 representation)
+      Eigen::Isometry3d matrix = path_tcp_matrix[i];
+      for (int col = 0; col < 4; ++col) {
+        for (int row = 0; row < 4; ++row) {
+            out_tcp_file << matrix(row, col) << " "; 
+        }
+      }
+      out_tcp_file << "\n";  // Newline for the next matrix
+    }
+
+    std::string hand_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_hand_trajectory.txt";
+    std::ofstream out_hand_file(hand_file_name);
+    // Save the Cartesian position of each position in path into file
+    for (const Eigen::Matrix<double, 7, 1>& wrist_pose : path_ee){
+      out_hand_file << wrist_pose(0) << " "
+              << wrist_pose(1) << " "
+              << wrist_pose(2) << " "
+              << wrist_pose(3) << " "
+              << wrist_pose(4) << " "
+              << wrist_pose(5) << " "
+              << wrist_pose(6) << "\n";
+    }
+  }
 
   return true;
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                                               const moveit::core::JointModelGroup* arm_jmg,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
   if (!arm_jmg)
@@ -1410,10 +1503,12 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
     return false;
   }
 
+  RCLCPP_INFO_STREAM(LOGGER, "Publishing path with color: " << color);
+
   // For each end effector
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
-    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, color))
+    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, offset, stage_id, subtraj_index, store_path, color))
       return false;
   }
 
@@ -1422,13 +1517,21 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                                               const moveit::core::JointModelGroup* arm_jmg,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
-  return publishTrajectoryLine(*robot_trajectory, arm_jmg, color);
+  return publishTrajectoryLine(*robot_trajectory, arm_jmg, offset, stage_id, subtraj_index, store_path, color);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                                               const moveit::core::JointModelGroup* arm_jmg,
+                                              const Eigen::Isometry3d &offset,
+                                              int stage_id,
+                                              int subtraj_index,
+                                              std::string store_path,
                                               const rviz_visual_tools::Colors& color)
 {
   if (!arm_jmg)
@@ -1447,7 +1550,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
   // For each end effector
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
-    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, color))
+    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color))
       return false;
   }
 

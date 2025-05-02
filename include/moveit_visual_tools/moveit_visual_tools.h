@@ -38,11 +38,7 @@
 #include <rviz_visual_tools/rviz_visual_tools.hpp>
 
 // MoveIt
-#if __has_include(<moveit/planning_scene_monitor/planning_scene_monitor.hpp>)
-#include <moveit/planning_scene_monitor/planning_scene_monitor.hpp>
-#else
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#endif
 
 // MoveIt Messages
 #include <moveit_msgs/msg/grasp.hpp>
@@ -60,6 +56,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+namespace EigenSTL {
+  typedef std::vector<Eigen::Matrix<double, 7, 1>, Eigen::aligned_allocator<Eigen::Matrix<double, 7, 1>>> vector_Vector7d;
+}
 
 namespace moveit_visual_tools
 {
@@ -80,7 +80,8 @@ public:
    * All Markers will be rendered in the planning frame of the model ROBOT_DESCRIPTION
    * and are published to rviz_visual_tools::RVIZ_MARKER_TOPIC
    */
-  MoveItVisualTools(const rclcpp::Node::SharedPtr& node);
+  MoveItVisualTools(const rclcpp::Node::SharedPtr& node,
+                    bool save_cartesian_path = false);
 
   /**
    * \brief Constructor
@@ -90,7 +91,8 @@ public:
    *        avoid having to re-load the URDF, kinematic solvers, etc
    */
   MoveItVisualTools(const rclcpp::Node::SharedPtr& node, const std::string& base_frame, const std::string& marker_topic,
-                    planning_scene_monitor::PlanningSceneMonitorPtr psm);
+                    planning_scene_monitor::PlanningSceneMonitorPtr psm,
+                    bool save_cartesian_path = false);
 
   /**
    * \brief Constructor
@@ -100,7 +102,8 @@ public:
    */
   MoveItVisualTools(const rclcpp::Node::SharedPtr& node, const std::string& base_frame,
                     const std::string& marker_topic = rviz_visual_tools::RVIZ_MARKER_TOPIC,
-                    moveit::core::RobotModelConstPtr robot_model = moveit::core::RobotModelConstPtr());
+                    moveit::core::RobotModelConstPtr robot_model = moveit::core::RobotModelConstPtr(),
+                    bool save_cartesian_path = false);
 
   /**
    * \brief Set the ROS topic for publishing a robot state
@@ -591,13 +594,27 @@ public:
   bool publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                              const moveit::core::LinkModel* ee_parent_link,
                              const moveit::core::JointModelGroup* arm_jmg,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+  
+  std::string getUniqueFileName(const std::string& base_name, const std::string& extension);
 
   /**
    * \brief Display a line of the end effector(s) path(s) from a robot trajectory path
@@ -609,12 +626,24 @@ public:
    */
   bool publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                              const moveit::core::JointModelGroup* arm_jmg,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
+                             const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             int stage_id = 0,
+                             int subtraj_index = 0,
+                             std::string store_path="/home/tp2/trajectories",
                              const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
 
   /**
@@ -704,6 +733,9 @@ protected:
 
   // Prevent the planning scene from always auto-pushing, but rather do it manually
   bool manual_trigger_update_ = false;
+
+  // Save published Cartesian path
+  bool save_cartesian_path_ = false;
 
   // Pointer to the robot model
   moveit::core::RobotModelConstPtr robot_model_;
