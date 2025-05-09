@@ -598,21 +598,24 @@ public:
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
   
   std::string getUniqueFileName(const std::string& base_name, const std::string& extension);
 
@@ -630,21 +633,24 @@ public:
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
-                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN);
+                             const rviz_visual_tools::Colors& color = rviz_visual_tools::LIME_GREEN,
+                             std::string base_link_name="world");
 
   /**
    * \brief Display trajectory as series of end effector position points

@@ -1327,7 +1327,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
   // Error check
   if (!arm_jmg)
@@ -1337,14 +1338,14 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
   }
 
   // Always load the robot state before using
-  loadSharedRobotState();
+  loadSharedRobotState(); // This will load the whole robot, not only left or right
 
   // Convert trajectory into a series of RobotStates
   robot_trajectory::RobotTrajectoryPtr robot_trajectory(
       new robot_trajectory::RobotTrajectory(robot_model_, arm_jmg->getName()));
   robot_trajectory->setRobotTrajectoryMsg(*shared_robot_state_, trajectory_msg);
 
-  return publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color);
+  return publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
@@ -1353,9 +1354,10 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
-  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color);
+  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 std::string MoveItVisualTools::getUniqueFileName(const std::string& base_name, const std::string& extension) {
@@ -1378,7 +1380,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
   // Error check
   if (!ee_parent_link)
@@ -1388,13 +1391,16 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
   }
 
   // Point location datastructure
-  EigenSTL::vector_Vector3d path;
-  EigenSTL::vector_Vector7d path_tcp;
-  EigenSTL::vector_Vector7d path_ee;
-  std::vector<Eigen::Isometry3d> path_tcp_matrix;
+  EigenSTL::vector_Vector3d path_tcp_trans_in_world;
+  // EigenSTL::vector_Vector7d path_tcp;
+  // EigenSTL::vector_Vector7d path_ee_in_base;
+  std::vector<Eigen::Isometry3d> path_tcp_matrix_in_base;
   std::vector<double> path_time_from_start;
 
   RCLCPP_INFO_STREAM(LOGGER, "Publishing path with color: " << color);
+
+  // robot base in world frame 
+  Eigen::Isometry3d robot_base_pose = robot_trajectory.getWayPoint(0).getGlobalLinkTransform(base_link_name);
 
   // Visualize end effector position of cartesian path
   for (std::size_t i = 0; i < robot_trajectory.getWayPointCount(); ++i)
@@ -1402,39 +1408,36 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
     double time_from_start = robot_trajectory.getWayPointDurationFromStart(i);
     path_time_from_start.push_back(time_from_start);
 
-    Eigen::Isometry3d ee_pose = robot_trajectory.getWayPoint(i).getGlobalLinkTransform(ee_parent_link);
-
+    // pose in world frame for publishing
+    Eigen::Isometry3d ee_pose_in_world= robot_trajectory.getWayPoint(i).getGlobalLinkTransform(ee_parent_link);
     // Apply the translation in the z-axis
-    Eigen::Isometry3d tcp_pose = ee_pose * offset;
-    path_tcp_matrix.push_back(tcp_pose);
+    Eigen::Isometry3d tcp_pose_in_world = ee_pose_in_world*offset;
+    path_tcp_trans_in_world.push_back(tcp_pose_in_world.translation());
 
-    // Error Check
-    if (ee_pose.translation().x() != ee_pose.translation().x())
-    {
-      RCLCPP_ERROR_STREAM(LOGGER, "NAN DETECTED AT TRAJECTORY POINT i=" << i);
-      return false;
-    }
+    // ee_pose in robot base frame for storage 
+    Eigen::Isometry3d ee_pose_in_base = robot_base_pose.inverse()*ee_pose_in_world;
+    // Apply the translation in the z-axiss
+    Eigen::Isometry3d tcp_pose_in_base = ee_pose_in_base*offset;
+    path_tcp_matrix_in_base.push_back(tcp_pose_in_base);
 
-    path.push_back(tcp_pose.translation());
+  
+    // Eigen::Quaterniond ee_rotation(ee_pose.rotation());
+    // // Concatenate translation and rotation into a single vector
+    // Eigen::Matrix<double, 7, 1> ee_pose_vector;
+    // ee_pose_vector << ee_pose.translation(), ee_rotation.coeffs();
+    // path_ee_in_base.push_back(ee_pose_vector);
 
-    Eigen::Quaterniond ee_rotation(ee_pose.rotation());
-    // Concatenate translation and rotation into a single vector
-    Eigen::Matrix<double, 7, 1> ee_pose_vector;
-    ee_pose_vector << ee_pose.translation(), ee_rotation.coeffs();
-    path_ee.push_back(ee_pose_vector);
+    // Eigen::Quaterniond tcp_rotation(tcp_pose_in_world.rotation());
+    // // Concatenate translation and rotation into a single vector
+    // Eigen::Matrix<double, 7, 1> tcp_pose_in_world_vector;
+    // tcp_pose_in_world_vector << tcp_pose_in_world.translation(), tcp_rotation.coeffs();
+    // path_tcp.push_back(tcp_pose_in_world_vector);
 
-
-    Eigen::Quaterniond tcp_rotation(tcp_pose.rotation());
-    // Concatenate translation and rotation into a single vector
-    Eigen::Matrix<double, 7, 1> tcp_pose_vector;
-    tcp_pose_vector << tcp_pose.translation(), tcp_rotation.coeffs();
-    path_tcp.push_back(tcp_pose_vector);
-
-    publishSphere(tcp_pose, color, rviz_visual_tools::MEDIUM);
+    publishSphere(tcp_pose_in_world, color, rviz_visual_tools::MEDIUM);
   }
 
   const double radius = 0.005;
-  publishPath(path, color, radius);
+  publishPath(path_tcp_trans_in_world, color, radius);
 
   if (save_cartesian_path_){
     std::string tcp_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_tcp_trajectory_" + std::to_string(subtraj_index) + ".txt";
@@ -1456,7 +1459,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
       out_tcp_file << time_stamp << " ";
       
       // Flatten the matrix into a row (3x4 representation)
-      Eigen::Isometry3d matrix = path_tcp_matrix[i];
+      Eigen::Isometry3d matrix = path_tcp_matrix_in_base[i];
       for (int col = 0; col < 4; ++col) {
         for (int row = 0; row < 4; ++row) {
             out_tcp_file << matrix(row, col) << " "; 
@@ -1465,18 +1468,18 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
       out_tcp_file << "\n";  // Newline for the next matrix
     }
 
-    std::string hand_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_hand_trajectory.txt";
-    std::ofstream out_hand_file(hand_file_name);
+    // std::string hand_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_hand_trajectory.txt";
+    // std::ofstream out_hand_file(hand_file_name);
     // Save the Cartesian position of each position in path into file
-    for (const Eigen::Matrix<double, 7, 1>& wrist_pose : path_ee){
-      out_hand_file << wrist_pose(0) << " "
-              << wrist_pose(1) << " "
-              << wrist_pose(2) << " "
-              << wrist_pose(3) << " "
-              << wrist_pose(4) << " "
-              << wrist_pose(5) << " "
-              << wrist_pose(6) << "\n";
-    }
+    // for (const Eigen::Matrix<double, 7, 1>& wrist_pose : path_ee_in_base){
+    //   out_hand_file << wrist_pose(0) << " "
+    //           << wrist_pose(1) << " "
+    //           << wrist_pose(2) << " "
+    //           << wrist_pose(3) << " "
+    //           << wrist_pose(4) << " "
+    //           << wrist_pose(5) << " "
+    //           << wrist_pose(6) << "\n";
+    // }
   }
 
   return true;
@@ -1488,7 +1491,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
   if (!arm_jmg)
   {
@@ -1508,7 +1512,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
   // For each end effector
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
-    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, offset, stage_id, subtraj_index, store_path, color))
+    RCLCPP_INFO_STREAM(LOGGER, "Publishing path for end effector: " << ee_parent_link->getName()); // default panda_link8 because kinematic chain ignores fixed joints
+    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, offset, stage_id, subtraj_index, store_path, color, base_link_name))
       return false;
   }
 
@@ -1521,9 +1526,10 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
-  return publishTrajectoryLine(*robot_trajectory, arm_jmg, offset, stage_id, subtraj_index, store_path, color);
+  return publishTrajectoryLine(*robot_trajectory, arm_jmg, offset, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
@@ -1532,7 +1538,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
-                                              const rviz_visual_tools::Colors& color)
+                                              const rviz_visual_tools::Colors& color,
+                                              std::string base_link_name)
 {
   if (!arm_jmg)
   {
@@ -1550,7 +1557,8 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
   // For each end effector
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
-    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color))
+    RCLCPP_INFO_STREAM(LOGGER, "Publishing path for end effector: " << ee_parent_link->getName()); // default panda_link8 because kinematic chain ignores fixed joints
+    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name))
       return false;
   }
 
