@@ -1324,6 +1324,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
                                               const moveit::core::LinkModel* ee_parent_link,
                                               const moveit::core::JointModelGroup* arm_jmg,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
@@ -1345,19 +1346,20 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
       new robot_trajectory::RobotTrajectory(robot_model_, arm_jmg->getName()));
   robot_trajectory->setRobotTrajectoryMsg(*shared_robot_state_, trajectory_msg);
 
-  return publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name);
+  return publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, task_id, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                                               const moveit::core::LinkModel* ee_parent_link,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
                                               const rviz_visual_tools::Colors& color,
                                               std::string base_link_name)
 {
-  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name);
+  return publishTrajectoryLine(*robot_trajectory, ee_parent_link, offset, task_id, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 std::string MoveItVisualTools::getUniqueFileName(const std::string& base_name, const std::string& extension) {
@@ -1377,6 +1379,7 @@ std::string MoveItVisualTools::getUniqueFileName(const std::string& base_name, c
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                                               const moveit::core::LinkModel* ee_parent_link,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
@@ -1440,9 +1443,10 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
   publishPath(path_tcp_trans_in_world, color, radius);
 
   if (save_cartesian_path_){
-    std::string tcp_file_name = store_path + "/stage_" + std::to_string(stage_id) + "_tcp_trajectory_" + std::to_string(subtraj_index) + ".txt";
+    std::string tcp_file_name = task_id + "_stage_" + std::to_string(stage_id) + "_tcp_trajectory_" + std::to_string(subtraj_index) + ".txt";
+    std::string tcp_file_path = store_path + "/" + tcp_file_name;
     // std::string tcp_file_name = getUniqueFileName(store_path + "/stage_" + std::to_string(stage_id) + "_tcp_trajectory", ".txt");
-    std::ofstream out_tcp_file(tcp_file_name);
+    std::ofstream out_tcp_file(tcp_file_path);
     // Save the Cartesian position of each position in path into file
     // for (const Eigen::Matrix<double, 7, 1>& fingertip_pose : path_tcp){
     //   out_tcp_file << fingertip_pose(0) << " "
@@ -1488,6 +1492,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
 bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                                               const moveit::core::JointModelGroup* arm_jmg,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
@@ -1513,7 +1518,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
     RCLCPP_INFO_STREAM(LOGGER, "Publishing path for end effector: " << ee_parent_link->getName()); // default panda_link8 because kinematic chain ignores fixed joints
-    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, offset, stage_id, subtraj_index, store_path, color, base_link_name))
+    if (!publishTrajectoryLine(trajectory_msg, ee_parent_link, arm_jmg, offset, task_id, stage_id, subtraj_index, store_path, color, base_link_name))
       return false;
   }
 
@@ -1523,18 +1528,20 @@ bool MoveItVisualTools::publishTrajectoryLine(const moveit_msgs::msg::RobotTraje
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                                               const moveit::core::JointModelGroup* arm_jmg,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
                                               const rviz_visual_tools::Colors& color,
                                               std::string base_link_name)
 {
-  return publishTrajectoryLine(*robot_trajectory, arm_jmg, offset, stage_id, subtraj_index, store_path, color, base_link_name);
+  return publishTrajectoryLine(*robot_trajectory, arm_jmg, offset, task_id, stage_id, subtraj_index, store_path, color, base_link_name);
 }
 
 bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                                               const moveit::core::JointModelGroup* arm_jmg,
                                               const Eigen::Isometry3d &offset,
+                                              std::string task_id,
                                               int stage_id,
                                               int subtraj_index,
                                               std::string store_path,
@@ -1558,7 +1565,7 @@ bool MoveItVisualTools::publishTrajectoryLine(const robot_trajectory::RobotTraje
   for (const moveit::core::LinkModel* ee_parent_link : tips)
   {
     RCLCPP_INFO_STREAM(LOGGER, "Publishing path for end effector: " << ee_parent_link->getName()); // default panda_link8 because kinematic chain ignores fixed joints
-    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, stage_id, subtraj_index, store_path, color, base_link_name))
+    if (!publishTrajectoryLine(robot_trajectory, ee_parent_link, offset, task_id, stage_id, subtraj_index, store_path, color, base_link_name))
       return false;
   }
 

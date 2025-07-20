@@ -595,6 +595,7 @@ public:
                              const moveit::core::LinkModel* ee_parent_link,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -603,6 +604,7 @@ public:
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -611,6 +613,7 @@ public:
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::LinkModel* ee_parent_link,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -630,6 +633,7 @@ public:
   bool publishTrajectoryLine(const moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -638,6 +642,7 @@ public:
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectoryPtr& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -646,6 +651,7 @@ public:
   bool publishTrajectoryLine(const robot_trajectory::RobotTrajectory& robot_trajectory,
                              const moveit::core::JointModelGroup* arm_jmg,
                              const Eigen::Isometry3d &offset = Eigen::Isometry3d::Identity(),
+                             std::string task_id = "clip5",
                              int stage_id = 0,
                              int subtraj_index = 0,
                              std::string store_path="/home/tp2/trajectories",
@@ -740,7 +746,7 @@ protected:
   // Prevent the planning scene from always auto-pushing, but rather do it manually
   bool manual_trigger_update_ = false;
 
-  // Save published Cartesian path
+  // Save Cartesian path
   bool save_cartesian_path_ = false;
 
   // Pointer to the robot model
